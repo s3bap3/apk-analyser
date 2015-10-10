@@ -1,5 +1,7 @@
 # apk-analyser
-The APK Static Analyzer is a tool to analyze Android APK in an static way. This script will extract information from the application's manifest and source code, and display it in a fashion way (except the strings from the source code)
+The APK Static Analyzer is a tool to analyze Android APK in an static way. This script will extract information from the application's manifest and source code, and display it in a fashion way (except the strings from the source code).
+
+Android AAPT tool is required so far in order to extract the information from the Android manifest
 
 	Usage:
 		apk-analyser.py -{a,b,c,d,f i,l,m,p,q,s,u,x} {App}
