@@ -1,8 +1,6 @@
 #!/usr/bin/python
-'''
-ver el tema del protection level
-http://developer.android.com/guide/topics/manifest/permission-element.html#plevel
-'''
+
+#02/12/15 Added exported analysis for activities, providers, services and receivers. Added Providers (-ar) that were lost in translation
 
 import sys
 import signal
@@ -12,7 +10,7 @@ import subprocess
 #import dvm
 
 global Path_aapt
-Path_aapt="./aapt"
+Path_aapt="aapt.exe"
 
 
 def signal_handler(signal, frame):
@@ -22,11 +20,11 @@ def signal_handler(signal, frame):
 	sys.exit(1)
 
 def signal_exit(signal, frame):
-    sys.exit(0)	
+	sys.exit(1)	
 
 def usage ():
 		print "\n\tUsage:"
-		print "\t\tapk-analyser.python -{a,b,c,d,f i,l,m,p,q,s,u,x} {App}"
+		print "\t\tapk-analyser.py -{a,b,c,d,f i,l,m,p,q,r,s,u,x,z} {App}"
 		print "\t\t-a\tApp Enumerate Activities"
 		print "\t\t-b\tApp Enumerate Broadcast Receiver"
 		print "\t\t-c\tApp Enumerate Content Providers"
@@ -38,11 +36,12 @@ def usage ():
 		print "\t\t-m\tApp Enumerate Metadata"
 		print "\t\t-p\tApp Enumerate Permissions"
 		print "\t\t-q\tApp Enumerate Dangerous Permissions"
+		print "\t\t-r\tApp Enumerate Providers"
 		print "\t\t-s\tApp Enumerate Services"
 		print "\t\t-sc\tApp Enumerate Secret Codes"
-		print "\t\t-sc\tApp Enumerate Strings"
-		print "\t\t-t\tApp Enumerate Source code Strings"
-		print "\t\t-x\tApp Enumerate Everything\n"
+		print "\t\t-t\tApp Enumerate Strings"
+		print "\t\t-x\tApp Enumerate Everything"
+		print "\t\t-z\tApp Dump RAW Manifest\n"
 		sys.exit()
 	
 			
@@ -56,8 +55,8 @@ def filter_permissions(outputraw):
 
 				
 def parse_manifest (manifest):
-	uses_feature = [] #hardware
-	uses_permission = [] # app permissions
+	uses_feature = []
+	uses_permission = []
 	activity = []
 	uses_library = []
 	service = []
@@ -69,6 +68,7 @@ def parse_manifest (manifest):
 	data = []
 	flag=""
 	parent=""
+	temp_exp = ""
 	
 	for line in manifest.splitlines():
 		if flag == "data" and "A: android" in line:
@@ -108,6 +108,8 @@ def parse_manifest (manifest):
 		elif "E: data" in line:
 			parent = flag
 			flag = "data"
+		elif "A: android:exported" in line:
+			parent = flag
 		if "A: android:name" in line:
 			(t1,line2,t2,t3,t4) = re.split('"',line)
 			if flag == "feature":
@@ -119,18 +121,22 @@ def parse_manifest (manifest):
 			elif flag == "activity":
 				activity.append(line2)
 				flag = line2
+				temp_exp = "activity"
 			elif flag == "library":
 				uses_library.append(line2)
 				flag = line2
 			elif flag == "service":
 				service.append(line2)
 				flag = line2
+				temp_exp = "service"
 			elif flag == "receiver":
 				receiver.append(line2)
 				flag = line2
+				temp_exp = "receiver"
 			elif flag == "provider":
 				provider.append(line2)
 				flag = line2
+				temp_exp = "provider"
 			elif flag == "meta-data":
 				meta_data.append(line2)
 				flag = "meta-data2"
@@ -155,17 +161,31 @@ def parse_manifest (manifest):
 				print line
 			permissions.append("Special Permission | " + parent + " | "+line2)
 			flag = parent
+		elif "A: android:exported" in line:
+			(t1,t2,line2) = re.split('\)',line)
+			if line2 == "0x0":
+				exported = "False"
+			else:
+				exported = "True"
+			if temp_exp == "activity":
+				activity.append("\t" + "Exported > " + exported)
+				temp_exp = ""
+			elif temp_exp == "service":
+				service.append("\t" + "Exported > " + exported)
+				temp_exp = ""
+			elif temp_exp == "receiver":
+				receiver.append("\t" + "Exported > " + exported)
+				temp_exp = ""
+			elif temp_exp == "provider":
+				provider.append("\t" + "Exported > " + exported)
+				temp_exp = ""
 			
 	uses_feature = list(set(uses_feature))
 	uses_permission = list(set(uses_permission))
-	activity = list(set(activity))
 	uses_library = list(set(uses_library))
-	service = list(set(service))
-	receiver = list(set(receiver))
-	provider = list(set(provider))
 	intent_filter = list(set(intent_filter))
 	permissions  = list(set(permissions))
-	
+
 	return uses_feature, uses_permission, activity, uses_library, service, receiver, provider, meta_data, intent_filter, permissions , data
 	
 	
@@ -179,7 +199,8 @@ def printlists(list):
 				print line
 	else:
 		print "N/A"
-				
+
+
 def printwparents(list, newlist):
 	if list != []:
 		for line in list:
@@ -194,18 +215,20 @@ def printwparents(list, newlist):
 
 def printwparents_sc(list, intent_filter, data, app):
 	isc = 0
+	print ('\nSecret Codes \n============')
 	if list != []:
 		for line in intent_filter:
 			if "SECRET_CODE" in line:
 				isc = 1
 				(line3,act,line4) = re.split('\|',line)
-				print ('\nAndroid Secret codes \n========')
 				print act
 				print "\t" + line3 + ">" + line4
 				for dataline in data:
 					if act in dataline:
 						(line3,act,line4) = re.split('\|',dataline)
 						print "\t" + line3 + ">" + line4
+	else:
+		print "N/A"
 
 
 def apps_enumeration (manifest, app, action):
@@ -214,69 +237,74 @@ def apps_enumeration (manifest, app, action):
 	(uses_feature, uses_permission, activity, uses_library, service, receiver, provider, meta_data, intent_filter, permissions , data)=parse_manifest(manifest)
 	newlist=permissions + intent_filter + data
 	if action == "-a":
-		print ('\nActivities \n========')
+		print ('\nActivities \n==========')
 		printlists (activity)
 	elif action == "-b":
-		print ('\nBroadcast Receivers \n========')
+		print ('\nBroadcast Receivers \n===================')
 		printlists (receiver)
 	elif action == "-s":
 		print ('\nServices \n========')
 		printlists (service)
 	elif action == "-d":
-		print ('\nData \n========')
+		print ('\nData \n====')
 		printlists (data)
 	elif action == "-c":
 		temp = subprocess.check_output('unzip -p ' + app + ' | strings | egrep "content://[a-zA-Z]" | sed -e "s/.*content:/content:/"', shell=True)
 		if temp != "":
-			print ('\nContent Providers \n========\n' + temp)
+			print ('\nContent Providers \n=================\n' + temp)
 	elif action == "-e":
 		temp = subprocess.check_output('unzip -p ' + app + ' | strings | grep "\.db.\?$" | sed -e "s/\t//"', shell=True)
 		if temp != "":
-			print ('\nDatabases \n========\n' + temp)
+			print ('\nDatabases \n=========\n' + temp)
 	elif action == "-p":
-		print ('\nPermissions \n========')
+		print ('\nPermissions \n===========')
 		printlists (uses_permission)
 	elif action == "-i":
-		print ('\nActions \n========')
+		print ('\nActions \n=======')
 		printlists (intent_filter)
 	elif action == "-f":
 		print ('\nFeatures \n========')
 		printlists (uses_feature)
 	elif action == "-l":
-		print ('\nLibraries \n========')
+		print ('\nLibraries \n=========')
 		printlists (uses_library)
 	elif action == "-m":
-		print ('\nMeta-Data \n========')
+		print ('\nMeta-Data \n=========')
 		printlists (meta_data)
+	elif action == "-r":
+		print ('\nProviders \n=========')
+		printlists (provider)
 	elif action == "-sc":
 		printwparents_sc (activity, intent_filter, data, app) 
 	elif action == "-x":
-		print ('\nActivities \n========')
+		print "\n[*] Analysis for app " + app
+		print ('\nActivities \n==========')
 		printwparents (activity, newlist)
-		print ('\nBroadcast Receivers \n========')
+		print ('\nBroadcast Receivers \n===================')
 		printwparents (receiver, newlist)
 		print ('\nServices \n========')
 		printwparents (service, newlist)
 		temp = subprocess.check_output('unzip -p ' + app + ' | strings | egrep "content://[a-zA-Z]" | sed -e "s/.*content:/content:/"', shell=True)
-		print ('\nContent Providers \n========\n' + temp)
-		print ('\nPermissions \n========')
+		print ('\nContent Providers \n=================\n' + temp)
+		print ('\nPermissions \n===========')
 		printwparents (uses_permission, newlist)
+		print ('\nProviders \n=========')
+		printlists (provider)
 		print ('\nFeatures \n========')
 		printwparents (uses_feature, newlist)
-		print ('\nLibraries \n========')
+		print ('\nLibraries \n=========')
 		printwparents (uses_library, newlist)
-		print ('\nMeta-Data \n========')
+		print ('\nMeta-Data \n=========')
 		printlists (meta_data)
-		print ('\nSource Code Strings \n===================')
-		extract_text(app)
 	elif action == "-q":
 		temp = uses_permission + permissions
 		output = filter_permissions(temp)
-		print ('\nDangerous Permissions \n========')
+		print ('\nDangerous Permissions \n=====================')
 		printlists(output)
 	elif action == "-t":
-		print ('\nSource Code Strings \n===================')
 		extract_text(app)
+	elif action == "-z":
+		print manifest
 
 
 def extract_text(app):
@@ -284,39 +312,33 @@ def extract_text(app):
 	strings2 = ["getSharedPreferences()","MODE_PRIVATE","MODE_WORLD_READABLE","MODE_WORD_WRITEABLE","addPreferencesFormResource","getExternalStorageDirectory()sdcard","db","sqlite","database","insert","delete","select","table","cursor","rawQueryin","IDENTIFICADORES","uid","user-id","imei","deviceId","deviceSerialNumber","devicePrint","X-DSN","phone","mdn","did","IMSI","uuid","HASHES","MD5","BASE64","des","getLastKnownLocation()","requestLocationUpdates()","getLatitude()","getLongitude()","LOCATION","http","https","HttpURLConnection","URLConnection","URL","TrustAllSSLSocket-Factory","AllTrustSSLSocketFactory","NonValidatingSSLSocketFactory","Toast.makeText","LOG"]
 	#temp = subprocess.check_output('unzip ' + app + ' classes.dex ; java -jar baksmali-2.1.0.jar classes.dex', shell=True)
 	for item in strings:
-		#temp = subprocess.check_output('find ./out -name "*.smali" -exec fgrep ' + item + ' {} \;', shell=True)
-		temp = subprocess.check_output('unzip -p '+ app +' classes.dex | strings | grep ' + item, shell=True)
+		#temp = subprocess.check_output('find ./out -name "*.smali" -exec grep -i ' + item + ' {} \;', shell=True)
+		temp = subprocess.check_output('unzip -p ' + app + ' classes.dex | strings | grep -i ' + item, shell=True)
 		print temp
 
+	
 	
 def getmanifest(app):
 	try:
 		act = subprocess.check_output( Path_aapt + ' dump xmltree ' + app + ' AndroidManifest.xml' , shell=True)
-		'''
-		manifest = subprocess.check_output(' unzip -p ' + app + ' AndroidManifest.xml' , shell=True)
-		ap = dvm.AXMLPrinter(manifest)
-		print ap.getBuff()
-		http://androguard.blogspot.com/2011/03/androids-binary-xml.html
-		'''
 		return act
 	except:
-		print "Invalid App"
+		print "[*] Error getting Manifest"
 		usage()
 	
 	
 if __name__ == "__main__":
-	actionslist = ["-a","-b","-c","-d","-e","-f","-i","-l","-m","-p","-q","-s","-sc","-t","-x"]
+	actionslist = ["-a","-b","-c","-d","-e","-f","-i","-l","-m","-p","-q","-r","-s","-sc","-t","-x","-z"]
 	signal.signal(signal.SIGINT, signal_handler)
 	if (len(sys.argv) != 3):
+		print "\n[*] Invalid Parameters"
 		usage()
 	action=sys.argv[1].lower()
-	if action not in actionslist:
-		usage()
 	app=sys.argv[2]
-	if (action in actionslist) and (app != ""):
+	if action in actionslist:
 		manifest = getmanifest(app)
 		apps_enumeration(manifest, app, action)
 	else:
-		print "\nError - Unknown Option" 
+		print "\n[*] Unknown Option" 
 		usage()			
 
