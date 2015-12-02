@@ -213,22 +213,22 @@ def printwparents(list, newlist):
 		print "N/A"
 
 
-def printwparents_sc(list, intent_filter, data, app):
+def printwparents_ss(list, intent_filter, data, app):
 	isc = 0
-	print ('\nSecret Codes \n============')
 	if list != []:
 		for line in intent_filter:
 			if "SECRET_CODE" in line:
 				isc = 1
 				(line3,act,line4) = re.split('\|',line)
+				print ('\nSecret codes \n============')
 				print act
 				print "\t" + line3 + ">" + line4
 				for dataline in data:
 					if act in dataline:
 						(line3,act,line4) = re.split('\|',dataline)
 						print "\t" + line3 + ">" + line4
-	else:
-		print "N/A"
+	if isc == 0:
+		print ('\nSecret codes \n============\n'+ "N/A")
 
 
 def apps_enumeration (manifest, app, action):
