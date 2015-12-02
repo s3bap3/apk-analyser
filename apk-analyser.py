@@ -36,7 +36,7 @@ def usage ():
 		print "\t\t-m\tApp Enumerate Metadata"
 		print "\t\t-p\tApp Enumerate Permissions"
 		print "\t\t-q\tApp Enumerate Dangerous Permissions"
-		print "\t\t-r\tApp Enumerate Providers"
+		print "\t\t-r\tApp Enumerate Content Resolver"
 		print "\t\t-s\tApp Enumerate Services"
 		print "\t\t-sc\tApp Enumerate Secret Codes"
 		print "\t\t-t\tApp Enumerate Strings"
@@ -252,7 +252,7 @@ def printwparents_ss(list, intent_filter, data, app):
 def apps_enumeration (manifest, app, action):
 	output = []
 	outputraw=[]
-	(uses_feature, uses_permission, activity, uses_library, service, receiver, provider, meta_data, intent_filter, permissions , data)=parse_manifest(manifest)
+	(uses_feature, uses_permission, activity, uses_library, service, receiver, provider, meta_data, intent_filter, permissions , data, cp_permission)=parse_manifest(manifest)
 	newlist=permissions + intent_filter + data
 	if action == "-a":
 		print ('\nActivities \n==========')
@@ -266,10 +266,10 @@ def apps_enumeration (manifest, app, action):
 	elif action == "-d":
 		print ('\nData \n====')
 		printlists (data)
-	elif action == "-c":
+	elif action == "-r":
 		temp = subprocess.check_output('unzip -p ' + app + ' | strings | egrep "content://[a-zA-Z]" | sed -e "s/.*content:/content:/"', shell=True)
 		if temp != "":
-			print ('\nContent Providers \n=================\n' + temp)
+			print ('\nContent Resolver \n================\n' + temp)
 	elif action == "-e":
 		temp = subprocess.check_output('unzip -p ' + app + ' | strings | grep "\.db.\?$" | sed -e "s/\t//"', shell=True)
 		if temp != "":
@@ -289,8 +289,8 @@ def apps_enumeration (manifest, app, action):
 	elif action == "-m":
 		print ('\nMeta-Data \n=========')
 		printlists (meta_data)
-	elif action == "-r":
-		print ('\nProviders \n=========')
+	elif action == "-c":
+		print ('\nContent Providers \n=================')
 		printlists (provider)
 	elif action == "-sc":
 		printwparents_sc (activity, intent_filter, data, app) 
@@ -303,10 +303,10 @@ def apps_enumeration (manifest, app, action):
 		print ('\nServices \n========')
 		printwparents (service, newlist)
 		temp = subprocess.check_output('unzip -p ' + app + ' | strings | egrep "content://[a-zA-Z]" | sed -e "s/.*content:/content:/"', shell=True)
-		print ('\nContent Providers \n=================\n' + temp)
+		print ('\nContent Resolver \n================\n' + temp)
 		print ('\nPermissions \n===========')
 		printwparents (uses_permission, newlist)
-		print ('\nProviders \n=========')
+		print ('\nContent Providers \n=================')
 		printlists (provider)
 		print ('\nFeatures \n========')
 		printwparents (uses_feature, newlist)
