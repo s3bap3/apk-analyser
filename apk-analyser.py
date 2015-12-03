@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 #02/12/15 Added exported analysis for activities, providers, services and receivers. Added Providers (-ar) that were lost in translation. Added codes for Manifest interpretation
+#03/12/15 Fixed permission issues
 
 import sys
 import signal
@@ -83,11 +84,11 @@ def parse_manifest (manifest):
 		if "E: uses-feature" in line:
 			flag = "feature"
 		elif "E: uses-permission" in line:
-			flag = "permission"
+			flag = "uses_permission"
 		elif "E: permission" in line:
 			flag = "permission"
 		elif "android.permission" in line:
-			flag = "permission"
+			flag = "uses_permission"
 		elif "E: activity" in line:
 			flag = "activity"
 		elif "E: uses-library" in line:
@@ -123,6 +124,9 @@ def parse_manifest (manifest):
 				activity.append(line2)
 				flag = line2
 				temp_exp = "activity"
+			elif flag == "uses_permission":
+				uses_permission.append(line2)
+				flag = line2
 			elif flag == "cp-permission":
 				cp_permission.append("Permission | " + parent + " | "+line2)
 				flag = line2
