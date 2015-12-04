@@ -2,6 +2,7 @@
 
 #02/12/15 Added exported analysis for activities, providers, services and receivers. Added Providers (-ar) that were lost in translation. Added codes for Manifest interpretation
 #03/12/15 Fixed permission issues
+#04/12/15 Fixed secretcodes, special permissions and output
 
 import sys
 import signal
@@ -68,6 +69,7 @@ def parse_manifest (manifest):
 	permissions=[]
 	data = []
 	cp_permission = []
+	proteclevel = []
 	flag=""
 	parent=""
 	temp_exp = ""
@@ -80,12 +82,13 @@ def parse_manifest (manifest):
 				(t1,line2) = re.split('=',line)
 			data.append("Data | " + parent + " | " + line2)
 		if flag == "data" and "A: android" not in line:
-			flag=parent			
+			flag=parent	
+		parent = flag
 		if "E: uses-feature" in line:
 			flag = "feature"
 		elif "E: uses-permission" in line:
 			flag = "uses_permission"
-		elif "E: permission" in line:
+		elif "E: permission (" in line:
 			flag = "permission"
 		elif "android.permission" in line:
 			flag = "uses_permission"
@@ -102,16 +105,11 @@ def parse_manifest (manifest):
 		elif "E: meta-data" in line:
 			flag = "meta-data"
 		elif "E: action" in line:
-			parent = flag
 			flag = "intent_filter"
 		elif "E: category" in line:
-			parent = flag
 			flag = "category"
 		elif "E: data" in line:
-			parent = flag
 			flag = "data"
-		elif "A: android:exported" in line or "0x01010010" in line:
-			parent = flag
 		if "A: android:name" in line or "0x01010003" in line:
 			(t1,line2,t2,t3,t4) = re.split('"',line)
 			if flag == "feature":
@@ -120,6 +118,9 @@ def parse_manifest (manifest):
 			elif flag == "uses-permission":
 				uses_permission.append(line2)
 				flag = ""
+			elif flag == "permission":
+				permissions.append(line2)
+				flag = line2
 			elif flag == "activity":
 				activity.append(line2)
 				flag = line2
@@ -163,52 +164,56 @@ def parse_manifest (manifest):
 				meta_data.append(line2)
 				flag = line2
 		elif "A: android:permission(" in line or "0x01010006" in line:
-			try:
-				(t1,line2,t2,t3,t4) = re.split('"',line)
-			except:
-				print line
-			permissions.append("Special Permission | " + parent + " | "+line2)
+			(t1,line2,t2,t3,t4) = re.split('"',line)
+			cp_permission.append("Special Permission | " + parent + " | "+line2)
 			flag = parent
 		elif "A: android:readPermission" in line or "0x01010007" in line:
-			try:
-				(t1,line2,t2,t3,t4) = re.split('"',line)
-			except:
-				print line
-			permissions.append("Read Permission | " + parent + " | "+line2)
+			(t1,line2,t2,t3,t4) = re.split('"',line)
+			cp_permission.append("Read Permission | " + parent + " | "+line2)
 			flag = parent
 		elif "A: android:writePermission" in line or "0x01010008" in line:
-			try:
-				(t1,line2,t2,t3,t4) = re.split('"',line)
-			except:
-				print line
-			permissions.append("Write Permission | " + parent + " | "+line2)
+			(t1,line2,t2,t3,t4) = re.split('"',line)
+			cp_permission.append("Write Permission | " + parent + " | "+line2)
 			flag = parent
-		elif "A: android:exported" in line:
+		elif "A: android:protectionLevel" in line or "0x01010009" in line:
+			(t1,t2,line2) = re.split('\)',line)
+			if line2 == "0x0":
+				level = "Normal"
+			elif line2 == "0x1":
+				level = "Dangerous"
+			elif line2 == "0x2":
+				level = "Signature"
+			elif line2 == "0x3":
+				level = "Signature or System"
+			proteclevel.append("Protection Level | " + parent + " | "+level)
+		elif "A: android:exported" in line or "0x01010010" in line:
 			(t1,t2,line2) = re.split('\)',line)
 			if line2 == "0x0":
 				exported = "False"
 			else:
 				exported = "True"
 			if temp_exp == "activity":
-				activity.append("\t" + "Exported > " + exported)
-				temp_exp = ""
+				temp = activity[-1]
+				activity[-1] = ( temp + " "*(130-len(temp)) + "\t" + "Exported > " + exported)
 			elif temp_exp == "service":
-				service.append("\t" + "Exported > " + exported)
-				temp_exp = ""
+				temp = service[-1]
+				service[-1] = ( temp + " "*(130-len(temp)) + "\t" + "Exported > " + exported)
 			elif temp_exp == "receiver":
-				receiver.append("\t" + "Exported > " + exported)
-				temp_exp = ""
+				temp = receiver[-1]
+				receiver[-1] = ( temp + " "*(130-len(temp)) + "\t" + "Exported > " + exported)
 			elif temp_exp == "provider":
-				provider.append("\t" + "Exported > " + exported)
-				temp_exp = ""
+				temp = provider[-1]
+				provider[-1] = ( temp + " "*(130-len(temp)) + "\t" + "Exported > " + exported)
+			temp_exp = ""
 			
 	uses_feature = list(set(uses_feature))
 	uses_permission = list(set(uses_permission))
 	uses_library = list(set(uses_library))
 	intent_filter = list(set(intent_filter))
 	permissions  = list(set(permissions))
+	service  = list(set(service))
 	
-	return uses_feature, uses_permission, activity, uses_library, service, receiver, provider, meta_data, intent_filter, permissions , data, cp_permission
+	return uses_feature, uses_permission, activity, uses_library, service, receiver, provider, meta_data, intent_filter, permissions , data, cp_permission, proteclevel
 	
 	
 def printlists(list):
@@ -228,36 +233,32 @@ def printwparents(list, newlist):
 		for line in list:
 			print line
 			for line2 in newlist:
-				if "| " + line + " |" in line2:
+				if "| " + line.split()[0] + " |" in line2:
 					(line3,t1,line4) = re.split('\|',line2)
 					print "\t" + line3 + ">" + line4
 	else:
 		print "N/A"
 
 
-def printwparents_ss(list, intent_filter, data, app):
-	isc = 0
-	if list != []:
-		for line in intent_filter:
-			if "SECRET_CODE" in line:
-				isc = 1
-				(line3,act,line4) = re.split('\|',line)
-				print ('\nSecret codes \n============')
-				print act
-				print "\t" + line3 + ">" + line4
-				for dataline in data:
-					if act in dataline:
-						(line3,act,line4) = re.split('\|',dataline)
-						print "\t" + line3 + ">" + line4
-	if isc == 0:
-		print ('\nSecret codes \n============\n'+ "N/A")
-
+def printwparents_sc(data):
+	code = 0
+	secretcodes = []
+	for dataline in data:
+		if code == 1:
+			(line3,act,line4) = re.split('\|',dataline)
+			secretcodes.append("\t" + line3 + ">" + line4)
+			code = 0
+		if "android_secret_code" in dataline:
+			code = 1
+	if secretcodes != []:
+		print "Action > android.provider.Telephony.SECRET_CODE" 
+		printlists(secretcodes)
 
 def apps_enumeration (manifest, app, action):
 	output = []
 	outputraw=[]
-	(uses_feature, uses_permission, activity, uses_library, service, receiver, provider, meta_data, intent_filter, permissions , data, cp_permission)=parse_manifest(manifest)
-	newlist=permissions + intent_filter + data
+	(uses_feature, uses_permission, activity, uses_library, service, receiver, provider, meta_data, intent_filter, permissions , data, cp_permission, proteclevel)=parse_manifest(manifest)
+	newlist= intent_filter + data + proteclevel + cp_permission
 	if action == "-a":
 		print ('\nActivities \n==========')
 		printlists (activity)
@@ -266,7 +267,7 @@ def apps_enumeration (manifest, app, action):
 		printlists (receiver)
 	elif action == "-s":
 		print ('\nServices \n========')
-		printlists (service)
+		printwparents (service, newlist)
 	elif action == "-d":
 		print ('\nData \n====')
 		printlists (data)
@@ -280,7 +281,10 @@ def apps_enumeration (manifest, app, action):
 			print ('\nDatabases \n=========\n' + temp)
 	elif action == "-p":
 		print ('\nPermissions \n===========')
+		print "[*] Required"
 		printlists (uses_permission)
+		print "[*] Exported"
+		printlists (permissions)
 	elif action == "-i":
 		print ('\nActions \n=======')
 		printlists (intent_filter)
@@ -297,7 +301,8 @@ def apps_enumeration (manifest, app, action):
 		print ('\nContent Providers \n=================')
 		printlists (provider)
 	elif action == "-sc":
-		printwparents_sc (activity, intent_filter, data, app) 
+		print ('\nSecret codes \n============')
+		printwparents_sc (data) 
 	elif action == "-x":
 		print "\n[*] Analysis for app " + app
 		print ('\nActivities \n==========')
@@ -309,15 +314,20 @@ def apps_enumeration (manifest, app, action):
 		temp = subprocess.check_output('unzip -p ' + app + ' | strings | egrep "content://[a-zA-Z]" | sed -e "s/.*content:/content:/"', shell=True)
 		print ('\nContent Resolver \n================\n' + temp)
 		print ('\nPermissions \n===========')
-		printwparents (uses_permission, newlist)
+		print "[*] Required"
+		printlists (uses_permission)
+		print "[*] Exported"
+		printwparents (permissions,newlist)
 		print ('\nContent Providers \n=================')
-		printlists (provider)
+		printwparents (provider,newlist)
 		print ('\nFeatures \n========')
 		printwparents (uses_feature, newlist)
 		print ('\nLibraries \n=========')
 		printwparents (uses_library, newlist)
 		print ('\nMeta-Data \n=========')
 		printlists (meta_data)
+		print ('\nSecret codes \n============')
+		printwparents_sc (data) 
 	elif action == "-q":
 		temp = uses_permission + permissions
 		output = filter_permissions(temp)
